@@ -1,0 +1,8 @@
+{
+    "model": "logistic_regression", 
+    "batch": 32,
+    "epochs": 15,
+    "output": "E:/",
+    "test": true,
+    "cv": false
+}
