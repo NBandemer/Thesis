@@ -13,8 +13,10 @@ from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
 
 def cross_val_model(data, model):
     x, y = get_data(data)    
-    score = cross_val_score(model, x, y, cv=5, scoring='accuracy').mean()
-    print(f'Cross validation score: {score}')
+    accuracies = cross_val_score(model, x, y, cv=5, scoring='accuracy')
+    accuracies_df = pd.DataFrame(accuracies, columns=['accuracy'])
+    model_cv_path = f'./metrics/{get_model_name(model)}/'
+    accuracies_df.to_csv(f'{model_cv_path}/cv_acc.csv', index=False, encoding='utf-8')
 
 def get_load_model_path(model):
     model_path = f'./saved_models/'
