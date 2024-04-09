@@ -81,10 +81,25 @@ def encode_data(df):
 
     return df
 
-def test_train_split(x,y):
+def test_train_split_by_year(data):
+    ratio = 0
+    year = 2022
+
+    while ratio < 0.2:
+        train = data[data['year'] < year]
+        test = data[data['year'] >= year]
+        test_count = len(test)
+        total = len(data)
+        ratio = test_count / total
+        year -= 1
+
+    train.to_csv('./data/test_train_split/train.csv', index=False, encoding='utf-8')
+    test.to_csv('./data/test_train_split/test.csv', index=False, encoding='utf-8')
+
+def test_train_split(x,y, seed=42):
     index = ['tourney_id', 'match_num']
 
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=seed)
     train = pd.concat([x_train, y_train], axis=1)
     test = pd.concat([x_test, y_test], axis=1)
 
@@ -154,4 +169,4 @@ def get_config():
             exit(1)
 
         config = argparse.Namespace(**config)
-        return bool(config.test), bool(config.cv), config.model
+        return bool(config.test), bool(config.cv), config.model, bool(config.time_split)

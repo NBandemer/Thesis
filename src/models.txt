@@ -1,3 +1,4 @@
-logistic_regression
-random_forest
+logr
+rf
 ann
+lgbm

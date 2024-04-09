@@ -190,7 +190,15 @@ def main():
     all_matches.to_csv('./data/atp_matches_1991-2023_with_stats_3.csv')
 
 def check_data():
-    data_path = './data/atp_matches_1991-2023_with_stats.csv'
+    data_path = './data/atp_matches_1991-2023.csv'
     all_matches = pd.read_csv(data_path)
-    rafa_novak = all_matches[(all_matches['winner_id'] == 104745) & (all_matches['loser_id'] == 104925) | (all_matches['winner_id'] == 104925) & (all_matches['loser_id'] == 104745)]
-    rafa_novak.to_csv('./data/rafa_novak.csv')
+    selected_h2h = all_matches[(all_matches['winner_id'] == 101532) & (all_matches['loser_id'] == 100995) | (all_matches['loser_id'] == 101532) & (all_matches['winner_id'] == 100995)]
+    selected_h2h.to_csv('./data/selected_h2h_def.csv')
+def check_processed_data():
+    data_path = './data/atp_matches_1991-2023_processed.csv'
+    all_matches = pd.read_csv(data_path)
+    selected_h2h = all_matches[(all_matches['player0_id'] == 101532) & (all_matches['player1_id'] == 100995) | (all_matches['player1_id'] == 101532) & (all_matches['player0_id'] == 100995)]
+    selected_h2h.to_csv('./data/selected_h2h.csv')
+
+if __name__ == '__main__':
+    check_data()

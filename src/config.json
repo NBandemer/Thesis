@@ -1,8 +1,8 @@
 {
-    "model": "ann", 
+    "model": "lgbm", 
     "batch": 32,
     "epochs": 15,
-    "output": "E:/",
-    "test": false,
-    "cv": true
+    "test": true,
+    "cv": false,
+    "time_split": true
 }

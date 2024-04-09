@@ -4,46 +4,57 @@ import pickle
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_val_score
 from sklearn.neural_network import MLPClassifier
+import lightgbm as lgb
+
+from sklearn.model_selection import cross_val_score
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, roc_curve
 from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
+from sklearn.preprocessing import StandardScaler
+
+# Keep this global so it can be later used to transform test data
+scaler = StandardScaler()
+
+supported_models = 'logr', 'rf', 'ann', 'lgbm'
+
+columns = []
 
 def cross_val_model(data, model):
-    x, y = get_data(data)    
-    accuracies = cross_val_score(model, x, y, cv=5, scoring='accuracy')
+    x, y = get_data(data)   
+    x_scaled = scaler.fit_transform(x)
+    accuracies = cross_val_score(model, x_scaled, y, cv=5, scoring='accuracy')
     accuracies_df = pd.DataFrame(accuracies, columns=['accuracy'])
     model_cv_path = f'./metrics/{get_model_name(model)}/'
     accuracies_df.to_csv(f'{model_cv_path}/cv_acc.csv', index=False, encoding='utf-8')
 
-def get_load_model_path(model):
-    model_path = f'./saved_models/'
-
-    if model == 'logistic_regression':
-        model_path = os.path.join(model_path, 'logistic_regression.joblib')
-    elif model == 'random_forest':
-        model_path = os.path.join(model_path, 'random_forest.joblib')
-    elif model == 'ann':
-        model_path = os.path.join(model_path, 'ann.joblib')
-    else:
+def get_load_model_path(model, time_split):
+    file_path = f'./saved_models/'
+    file_path += 'time_split/' if time_split else 'random_split/'
+    file_path += f"{model}.joblib"
+    
+    if model not in supported_models:
         raise Exception("Model type not implemented")
-
-    return model_path
-
+    elif os.path.exists(file_path):
+        return file_path
+    else:
+        raise Exception("Model not found")
 
 def get_model_name(model):
     if type(model) is LogisticRegression:
-        return 'logistic_regression'
+        return 'logr'
     elif type(model) is RandomForestClassifier:
-        return 'random_forest'
+        return 'rf'
     elif type(model) is MLPClassifier:
         return 'ann'
+    elif type(model) is lgb.LGBMClassifier:
+        return 'lgbm'
     else:
         raise Exception("Model type not implemented")
 
-def compute_metrics(model, x, y):
+def compute_metrics(model, x, y, time_split):
     preds = model.predict(x)
     pred_probs = model.predict_proba(x)[:,1]
     
@@ -62,6 +73,8 @@ def compute_metrics(model, x, y):
     best_threshold = thresholds[np.argmax(tpr - fpr)]
 
     metrics_path = f'./metrics/{model_name}'
+    metrics_path = os.path.join(metrics_path, 'time_split/') if time_split else os.path.join(metrics_path, 'random_split/')
+    os.makedirs(metrics_path, exist_ok=True)
 
     # Save CM
     cm.plot()
@@ -88,40 +101,46 @@ def compute_metrics(model, x, y):
     })
     metrics_df.to_csv(f"{metrics_path}/metrics.csv", index=False, encoding='utf-8')
 
-def get_saved_model_path(model):
+def get_saved_model_path(model, time_split):
     model_path = f'./saved_models/'
 
+    model_path += 'time_split/' if time_split else 'random_split/'
+
     if type(model) is LogisticRegression:
-        model_path = os.path.join(model_path, 'logistic_regression.joblib')
+        model_path = os.path.join(model_path, 'logr.joblib')
     elif type(model) is RandomForestClassifier:
-        model_path = os.path.join(model_path, 'random_forest.joblib')
+        model_path = os.path.join(model_path, 'rf.joblib')
     elif type(model) is MLPClassifier:
         model_path = os.path.join(model_path, 'ann.joblib')
+    elif type(model) is lgb.LGBMClassifier:
+        model_path = os.path.join(model_path, 'lgbm.joblib')
     else:
         raise Exception("Model type not implemented")
 
     return model_path
 
-def save_model(model):
-    model_path = get_saved_model_path(model)
+def save_model(model, time_split):
+    model_path = get_saved_model_path(model, time_split)
     joblib.dump(model, model_path)
 
-def load_model(model):
-    model_path = get_load_model_path(model)
-    model= joblib.load(model_path)
+def load_model(model, time_split):
+    model_path = get_load_model_path(model, time_split)
+    model = joblib.load(model_path)
     return model
 
-def create_model(model):
-    if model == "logistic_regression":
-        return LogisticRegression(max_iter=1000, random_state=42)
-    elif model == "random_forest":
-        return RandomForestClassifier(max_depth=2, random_state=42)
+def create_model(model, seed=42):
+    if model == "logr":
+        return LogisticRegression(max_iter=1000, random_state=seed)
+    elif model == "rf":
+        return RandomForestClassifier(max_depth=2, random_state=seed)
     elif model == "ann":
-        return MLPClassifier(hidden_layer_sizes=(100, 100), max_iter=1000, random_state=42, verbose=True)
+        return MLPClassifier(hidden_layer_sizes=(100, 100), max_iter=1000, random_state=seed, verbose=True)
+    elif model == "lgbm":
+        return lgb.LGBMClassifier(random_state=seed)
 
-def get_feature_importance(model, x):
+def get_feature_importance(model):
     feature_importance = model.coef_[0]
-    feature_names = x.columns.tolist()
+    feature_names = columns
 
     feature_importance = list(zip(feature_names, feature_importance))
     feature_importance = sorted(feature_importance, key=lambda x: abs(x[1]), reverse=True)
@@ -129,17 +148,17 @@ def get_feature_importance(model, x):
     feature_df = pd.DataFrame(feature_importance, columns=['feature', 'coef'])
     feature_df.to_csv('./data/feature_importance.csv', index=False, encoding='utf-8')
 
-def train_model(model, x, y):
+def train_model(model, x, y, time_split):
     model.fit(x, y)
 
     if type(model) is LogisticRegression:
-        get_feature_importance(model, x)
+        get_feature_importance(model)
 
-    save_model(model)
+    save_model(model, time_split)
 
-def select_model(test, model_type):
+def select_model(test, model_type, time_split):
     if test:
-        return load_model(model_type)
+        return load_model(model_type, time_split)
     else:
         return create_model(model_type)
 
@@ -148,14 +167,33 @@ def get_data(data):
         raise Exception("No data to train the model")
     elif "winner" not in data.columns:
         raise Exception("No target variable in the data")
-    x = data.iloc[:, :-1]
-    y = data['winner']
+
+    # From ChatGPT to make sure number of instances where winner is 0 and 1 are equal
+    min_count = data['winner'].value_counts().min()
+    balanced_df = pd.concat([
+        data[data['winner'] == 0].sample(n=min_count, random_state=1),
+        data[data['winner'] == 1].sample(n=min_count, random_state=1)
+    ])
+
+    x = balanced_df.drop(columns=['winner'])
+    y = balanced_df['winner']
     return x, y
 
-def run_testing(data, model):
+def run_testing(data, train_data, model, time_split):
     x, y = get_data(data)
-    compute_metrics(model, x, y)
 
-def run_training(data, model):   
+    try:
+        means = scaler.mean_
+    except AttributeError:
+        X_train, _ = get_data(train_data)
+        scaler.fit_transform(X_train)
+    
+    x_scaled = scaler.transform(x)
+    compute_metrics(model, x_scaled, y, time_split)
+
+def run_training(data, model, time_split):   
+    global columns
     x, y = get_data(data)
-    train_model(model, x, y)
+    columns = x.columns
+    x_scaled = scaler.fit_transform(x) if scaler is not None else exit(1)
+    train_model(model, x_scaled, y, time_split)
