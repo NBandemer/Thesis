@@ -26,7 +26,9 @@ if cv and train_data is not None:
 elif test and test_data is not None:
     m.run_testing(data=test_data, train_data=train_data, model=model, time_split=time_split)
 elif not test and train_data is not None:
+    print('Training model...')
     m.run_training(data=train_data, model=model, time_split=time_split)
+    print('Model trained successfully!')
 else:
     print('Invalid mode or no data to train/test the model!')
 
