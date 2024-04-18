@@ -2,6 +2,6 @@
     "model": "lgbm", 
     "batch": 32,
     "epochs": 15,
-    "test": true,
+    "test": false,
     "cv": false
 }

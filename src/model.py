@@ -12,7 +12,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 import lightgbm as lgb
 
+from sklearn.decomposition import PCA
+
 from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, roc_curve
 from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
 from sklearn.preprocessing import StandardScaler
@@ -25,15 +28,27 @@ supported_models = 'logr', 'lgbm', 'xgb'
 columns = []
 
 def cross_val_model(data, model):
-    x, y = get_data(data)   
-    x_scaled = scaler.fit_transform(x)
-    accuracies = cross_val_score(model, x_scaled, y, cv=5, scoring='accuracy')
+    tss = TimeSeriesSplit(n_splits=4)
+    accuracies = []
+
+    model = create_model('lgbm')
+
+    for train_index, test_index in tss.split(data):
+        train, test = data.iloc[train_index], data.iloc[test_index]
+        x, y = get_data(train)
+        x_scaled = scaler.fit_transform(x)
+        x_test, y_test = get_data(test)
+        x_test_scaled = scaler.transform(x_test)
+        model.fit(x_scaled, y)
+        accuracy = model.score(x_test_scaled, y_test)
+        accuracies.append(accuracy)
+
     accuracies_df = pd.DataFrame(accuracies, columns=['accuracy'])
     model_cv_path = f'./metrics/{get_model_name(model)}/'
     accuracies_df.to_csv(f'{model_cv_path}/cv_acc.csv', index=False, encoding='utf-8')
 
 def get_load_model_path(model):
-    file_path = f'./saved_models/refined/{model}.joblib'
+    file_path = f'./saved_models/rank/{model}.joblib'
     
     if model not in supported_models:
         raise Exception("Model type not implemented")
@@ -71,7 +86,7 @@ def compute_metrics(model, x, y):
     best_threshold = thresholds[np.argmax(tpr - fpr)]
 
     metrics_path = f'./metrics/{model_name}'
-    metrics_path = os.path.join(metrics_path, 'refined/')
+    metrics_path = os.path.join(metrics_path, 'rank/')
     os.makedirs(metrics_path, exist_ok=True)
 
     # Save CM
@@ -100,7 +115,7 @@ def compute_metrics(model, x, y):
     metrics_df.to_csv(f"{metrics_path}/metrics.csv", index=False, encoding='utf-8')
 
 def get_saved_model_path(model):
-    model_path = f'./saved_models/refined/'
+    model_path = f'./saved_models/rank/'
 
     if type(model) is LogisticRegression:
         model_path = os.path.join(model_path, 'logr.joblib')
@@ -133,10 +148,10 @@ def create_model(model, seed=42):
 def get_feature_importance(model):
     if type(model) is LogisticRegression:
         feature_importance = model.coef_[0]
-        path = './metrics/logr/refined/feature_importance.csv'
+        path = './metrics/logr/rank/feature_importance.csv'
     elif type(model) is lgb.LGBMClassifier:
         feature_importance = model.feature_importances_
-        path = './metrics/lgbm/refined/feature_importance.csv'
+        path = './metrics/lgbm/rank/feature_importance.csv'
 
     feature_names = columns
 
@@ -184,14 +199,14 @@ def get_data(data):
     levels = ['A','D','F','G','M']
     surfaces = ['Carpet', 'Clay', 'Hard', 'Grass']
 
-    if get_model_name(model) == 'logr':
-        for surface in surfaces:
-            dropped.append('surface_' + surface)
+    # if get_model_name(model) == 'logr':
+    #     for surface in surfaces:
+    #         dropped.append('surface_' + surface)
         
-        for level in levels:
-            dropped.append('tourney_level_' + level)
+    #     for level in levels:
+    #         dropped.append('tourney_level_' + level)
 
-        balanced_df = balanced_df.drop(columns=dropped)
+    #     balanced_df = balanced_df.drop(columns=dropped)
     
     x = balanced_df.drop(columns=['winner'])
     y = balanced_df['winner']
@@ -215,4 +230,7 @@ def run_training(data, model):
     x, y = get_data(data)
     columns = x.columns
     x_scaled = scaler.fit_transform(x) if scaler is not None else exit(1)
+    pca = PCA(n_components=0.95, svd_solver='full')
+    pca.fit(x_scaled)
+    x_scaled = pca.transform(x_scaled)
     train_model(model, x_scaled, y)
