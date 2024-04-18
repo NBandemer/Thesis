@@ -13,7 +13,7 @@ train_data = None
 test_data = None
 
 # Load test or training data depending on mode
-data_path = './data/time_split' 
+data_path = './data/refined' 
 
 if test:
     test_data = pd.read_csv(f'{data_path}/test.csv').dropna()

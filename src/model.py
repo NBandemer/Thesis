@@ -33,7 +33,7 @@ def cross_val_model(data, model):
     accuracies_df.to_csv(f'{model_cv_path}/cv_acc.csv', index=False, encoding='utf-8')
 
 def get_load_model_path(model):
-    file_path = f'./saved_models/time_split/{model}.joblib'
+    file_path = f'./saved_models/refined/{model}.joblib'
     
     if model not in supported_models:
         raise Exception("Model type not implemented")
@@ -71,7 +71,7 @@ def compute_metrics(model, x, y):
     best_threshold = thresholds[np.argmax(tpr - fpr)]
 
     metrics_path = f'./metrics/{model_name}'
-    metrics_path = os.path.join(metrics_path, 'time_split/')
+    metrics_path = os.path.join(metrics_path, 'refined/')
     os.makedirs(metrics_path, exist_ok=True)
 
     # Save CM
@@ -100,7 +100,7 @@ def compute_metrics(model, x, y):
     metrics_df.to_csv(f"{metrics_path}/metrics.csv", index=False, encoding='utf-8')
 
 def get_saved_model_path(model):
-    model_path = f'./saved_models/time_split/'
+    model_path = f'./saved_models/refined/'
 
     if type(model) is LogisticRegression:
         model_path = os.path.join(model_path, 'logr.joblib')
@@ -133,10 +133,10 @@ def create_model(model, seed=42):
 def get_feature_importance(model):
     if type(model) is LogisticRegression:
         feature_importance = model.coef_[0]
-        path = './metrics/logr/time_split/feature_importance.csv'
+        path = './metrics/logr/refined/feature_importance.csv'
     elif type(model) is lgb.LGBMClassifier:
         feature_importance = model.feature_importances_
-        path = './metrics/lgbm/time_split/feature_importance.csv'
+        path = './metrics/lgbm/refined/feature_importance.csv'
 
     feature_names = columns
 
@@ -160,6 +160,13 @@ def select_model(test, model_type):
     else:
         return create_model(model_type)
 
+def get_differentials(data):
+    cols = ['first_serve_pt', 'first_serve_won', 'second_serve_won', 'double_faults', 'aces', 'break_points_saved', 'break_points_faced', 'return_first_serve_pt_won', 'return_second_serve_won', 'bp_converted', 'bp_opportunities', 'match_difficulty']
+    for col in cols:
+        data[col] = data['player1_' + col] - data['player0_' + col]
+        data = data.drop(columns=['player0_' + col, 'player1_' + col])
+    return data
+
 def get_data(data):
     if data is None or len(data) < 1:
         raise Exception("No data to train the model")
@@ -173,8 +180,22 @@ def get_data(data):
         data[data['winner'] == 1].sample(n=min_count, random_state=1)
     ])
 
+    dropped = ['round', 'best_of', 'draw_size', 'day_sin', 'day_cos']
+    levels = ['A','D','F','G','M']
+    surfaces = ['Carpet', 'Clay', 'Hard', 'Grass']
+
+    if get_model_name(model) == 'logr':
+        for surface in surfaces:
+            dropped.append('surface_' + surface)
+        
+        for level in levels:
+            dropped.append('tourney_level_' + level)
+
+        balanced_df = balanced_df.drop(columns=dropped)
+    
     x = balanced_df.drop(columns=['winner'])
     y = balanced_df['winner']
+
     return x, y
 
 def run_testing(data, train_data, model):

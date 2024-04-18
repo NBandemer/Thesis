@@ -188,7 +188,7 @@ def main():
     print((end - start) / 60)
     all_matches.dropna(subset=new_cols, inplace=True)
     all_matches.drop(columns=old_cols, inplace=True)
-    all_matches.to_csv('../../data/atp_matches_1991-2023_with_refined_stats.csv')
+    all_matches.to_csv('./data/atp_matches_1991-2023_with_refined_stats.csv')
 
 def check_data():
     data_path = './data/atp_matches_1991-2023.csv'
