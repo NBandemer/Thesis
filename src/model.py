@@ -5,6 +5,8 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 
+import xgboost as xgb
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
@@ -18,7 +20,7 @@ from sklearn.preprocessing import StandardScaler
 # Keep this global so it can be later used to transform test data
 scaler = StandardScaler()
 
-supported_models = 'logr', 'rf', 'ann', 'lgbm'
+supported_models = 'logr', 'lgbm', 'xgb'
 
 columns = []
 
@@ -30,10 +32,8 @@ def cross_val_model(data, model):
     model_cv_path = f'./metrics/{get_model_name(model)}/'
     accuracies_df.to_csv(f'{model_cv_path}/cv_acc.csv', index=False, encoding='utf-8')
 
-def get_load_model_path(model, time_split):
-    file_path = f'./saved_models/'
-    file_path += 'time_split/' if time_split else 'random_split/'
-    file_path += f"{model}.joblib"
+def get_load_model_path(model):
+    file_path = f'./saved_models/time_split/{model}.joblib'
     
     if model not in supported_models:
         raise Exception("Model type not implemented")
@@ -45,16 +45,14 @@ def get_load_model_path(model, time_split):
 def get_model_name(model):
     if type(model) is LogisticRegression:
         return 'logr'
-    elif type(model) is RandomForestClassifier:
-        return 'rf'
-    elif type(model) is MLPClassifier:
-        return 'ann'
     elif type(model) is lgb.LGBMClassifier:
         return 'lgbm'
+    elif type(model) is xgb.XGBClassifier:
+        return 'xgb'
     else:
         raise Exception("Model type not implemented")
 
-def compute_metrics(model, x, y, time_split):
+def compute_metrics(model, x, y):
     preds = model.predict(x)
     pred_probs = model.predict_proba(x)[:,1]
     
@@ -73,7 +71,7 @@ def compute_metrics(model, x, y, time_split):
     best_threshold = thresholds[np.argmax(tpr - fpr)]
 
     metrics_path = f'./metrics/{model_name}'
-    metrics_path = os.path.join(metrics_path, 'time_split/') if time_split else os.path.join(metrics_path, 'random_split/')
+    metrics_path = os.path.join(metrics_path, 'time_split/')
     os.makedirs(metrics_path, exist_ok=True)
 
     # Save CM
@@ -101,64 +99,64 @@ def compute_metrics(model, x, y, time_split):
     })
     metrics_df.to_csv(f"{metrics_path}/metrics.csv", index=False, encoding='utf-8')
 
-def get_saved_model_path(model, time_split):
-    model_path = f'./saved_models/'
-
-    model_path += 'time_split/' if time_split else 'random_split/'
+def get_saved_model_path(model):
+    model_path = f'./saved_models/time_split/'
 
     if type(model) is LogisticRegression:
         model_path = os.path.join(model_path, 'logr.joblib')
-    elif type(model) is RandomForestClassifier:
-        model_path = os.path.join(model_path, 'rf.joblib')
-    elif type(model) is MLPClassifier:
-        model_path = os.path.join(model_path, 'ann.joblib')
     elif type(model) is lgb.LGBMClassifier:
         model_path = os.path.join(model_path, 'lgbm.joblib')
+    elif type(model) is xgb.XGBClassifier:
+        model_path = os.path.join(model_path, 'xgb.joblib')
     else:
         raise Exception("Model type not implemented")
 
     return model_path
 
-def save_model(model, time_split):
-    model_path = get_saved_model_path(model, time_split)
+def save_model(model):
+    model_path = get_saved_model_path(model)
     joblib.dump(model, model_path)
 
-def load_model(model, time_split):
-    model_path = get_load_model_path(model, time_split)
+def load_model(model):
+    model_path = get_load_model_path(model)
     model = joblib.load(model_path)
     return model
 
 def create_model(model, seed=42):
     if model == "logr":
         return LogisticRegression(max_iter=1000, random_state=seed)
-    elif model == "rf":
-        return RandomForestClassifier(max_depth=2, random_state=seed)
-    elif model == "ann":
-        return MLPClassifier(hidden_layer_sizes=(100, 100), max_iter=1000, random_state=seed, verbose=True)
     elif model == "lgbm":
         return lgb.LGBMClassifier(random_state=seed)
+    elif model == "xgb":
+        return xgb.XGBClassifier(random_state=seed)
 
 def get_feature_importance(model):
-    feature_importance = model.coef_[0]
+    if type(model) is LogisticRegression:
+        feature_importance = model.coef_[0]
+        path = './metrics/logr/time_split/feature_importance.csv'
+    elif type(model) is lgb.LGBMClassifier:
+        feature_importance = model.feature_importances_
+        path = './metrics/lgbm/time_split/feature_importance.csv'
+
     feature_names = columns
 
     feature_importance = list(zip(feature_names, feature_importance))
     feature_importance = sorted(feature_importance, key=lambda x: abs(x[1]), reverse=True)
 
     feature_df = pd.DataFrame(feature_importance, columns=['feature', 'coef'])
-    feature_df.to_csv('./data/feature_importance.csv', index=False, encoding='utf-8')
+    feature_df.to_csv(path, index=False, encoding='utf-8')
 
-def train_model(model, x, y, time_split):
+def train_model(model, x, y):
     model.fit(x, y)
 
-    if type(model) is LogisticRegression:
+    if type(model) is LogisticRegression or type(model) is lgb.LGBMClassifier:
         get_feature_importance(model)
 
-    save_model(model, time_split)
+    save_model(model)
 
-def select_model(test, model_type, time_split):
+def select_model(test, model_type):
     if test:
-        return load_model(model_type, time_split)
+        return load_model(model_type)
     else:
         return create_model(model_type)
 
@@ -179,7 +177,7 @@ def get_data(data):
     y = balanced_df['winner']
     return x, y
 
-def run_testing(data, train_data, model, time_split):
+def run_testing(data, train_data, model):
     x, y = get_data(data)
 
     try:
@@ -189,11 +187,11 @@ def run_testing(data, train_data, model, time_split):
         scaler.fit_transform(X_train)
     
     x_scaled = scaler.transform(x)
-    compute_metrics(model, x_scaled, y, time_split)
+    compute_metrics(model, x_scaled, y)
 
-def run_training(data, model, time_split):   
+def run_training(data, model):   
     global columns
     x, y = get_data(data)
     columns = x.columns
     x_scaled = scaler.fit_transform(x) if scaler is not None else exit(1)
-    train_model(model, x_scaled, y, time_split)
+    train_model(model, x_scaled, y)

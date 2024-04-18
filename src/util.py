@@ -50,6 +50,13 @@ def encode_dates(df):
     df['day_cos'] = np.cos(2 * np.pi * df['day']/365)
     return df
 
+def encode_xgb_data(df):
+    cats = df.select_dtypes(exclude=np.number).columns.tolist()
+    for cat in cats:
+        df[cat] = df[cat].astype('category')
+    return df
+
+
 def encode_data(df):
     # Encode data
     # Update hand to a boolean value (0 = R, 1 = L, 2= unknown)
