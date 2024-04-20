@@ -1,4 +1,5 @@
 import pandas as pd
+from sklearn.linear_model import LogisticRegression
 import model as m
 import util as u
 
@@ -13,7 +14,7 @@ train_data = None
 test_data = None
 
 # Load test or training data depending on mode
-data_path = './data/refined' 
+data_path = './data/rank_points' if type(model) == LogisticRegression else './data/rank'
 
 if test:
     test_data = pd.read_csv(f'{data_path}/test.csv').dropna()

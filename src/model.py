@@ -1,20 +1,16 @@
 import os
 import joblib
-import pickle
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 
 import xgboost as xgb
 
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.neural_network import MLPClassifier
 import lightgbm as lgb
 
 from sklearn.decomposition import PCA
 
-from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, roc_curve
 from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
@@ -30,25 +26,31 @@ columns = []
 def perform_pca(x, x_test=None):
     pca = PCA(n_components=0.95, svd_solver='full')
     pca.fit(x)
-    x_scaled = pca.transform(x_scaled)
-    x_test_scaled = pca.transform(x_test_scaled)
+    x_scaled = pca.transform(x)
+    x_test_scaled = pca.transform(x_test) if x_test is not None else None
+    return x_scaled, x_test_scaled
 
 
-def cross_val_model(data, model, pca):
-    tss = TimeSeriesSplit(n_splits=4)
+def cross_val_model(data, model_name, pca):
+    global columns
+    
+    tss = TimeSeriesSplit(n_splits=5)
     accuracies = []
-
-    model = create_model('lgbm')
+    current_split = 0
 
     for train_index, test_index in tss.split(data):
+        current_split += 1
+        model = select_model(False, model_name)
+
         train, test = data.iloc[train_index], data.iloc[test_index]
         x, y = get_data(train, model)
         x_scaled = scaler.fit_transform(x)
+
         x_test, y_test = get_data(test, model)
         x_test_scaled = scaler.transform(x_test)
 
-        if (pca):
-            perform_pca(x_scaled, x_test_scaled)
+        if pca:
+            x_scaled, x_test_scaled = perform_pca(x_scaled, x_test_scaled)
 
         model.fit(x_scaled, y)
         accuracy = model.score(x_test_scaled, y_test)
@@ -59,7 +61,7 @@ def cross_val_model(data, model, pca):
     accuracies_df.to_csv(f'{model_cv_path}/cv_acc.csv', index=False, encoding='utf-8')
 
 def get_load_model_path(model):
-    file_path = f'./saved_models/both/{model}.joblib'
+    file_path = f'./saved_models/{model}.joblib'
     
     if model not in supported_models:
         raise Exception("Model type not implemented")
@@ -97,7 +99,7 @@ def compute_metrics(model, x, y):
     best_threshold = thresholds[np.argmax(tpr - fpr)]
 
     metrics_path = f'./metrics/{model_name}'
-    metrics_path = os.path.join(metrics_path, 'both/')
+    metrics_path = os.path.join(metrics_path, '')
     os.makedirs(metrics_path, exist_ok=True)
 
     # Save CM
@@ -126,7 +128,7 @@ def compute_metrics(model, x, y):
     metrics_df.to_csv(f"{metrics_path}/metrics.csv", index=False, encoding='utf-8')
 
 def get_saved_model_path(model):
-    model_path = f'./saved_models/both/'
+    model_path = f'./saved_models/'
 
     if type(model) is LogisticRegression:
         model_path = os.path.join(model_path, 'logr.joblib')
@@ -159,10 +161,10 @@ def create_model(model, seed=42):
 def get_feature_importance(model):
     if type(model) is LogisticRegression:
         feature_importance = model.coef_[0]
-        path = './metrics/logr/both/feature_importance.csv'
+        path = './metrics/logr/feature_importance.csv'
     elif type(model) is lgb.LGBMClassifier:
         feature_importance = model.feature_importances_
-        path = './metrics/lgbm/both/feature_importance.csv'
+        path = './metrics/lgbm/feature_importance.csv'
 
     feature_names = columns
 
@@ -206,7 +208,7 @@ def get_data(data, model=None):
         data[data['winner'] == 1].sample(n=min_count, random_state=1)
     ])
 
-    dropped = ['round', 'best_of', 'draw_size', 'day_sin', 'day_cos', 'player0_rank', 'player1_rank']
+    dropped = ['round', 'best_of', 'draw_size', 'day_sin', 'day_cos']
     levels = ['A','D','F','G','M']
     surfaces = ['Carpet', 'Clay', 'Hard', 'Grass']
 
@@ -219,7 +221,7 @@ def get_data(data, model=None):
 
         balanced_df = balanced_df.drop(columns=dropped)
     
-    x = balanced_df.drop(columns=['winner'])
+    x = balanced_df.drop(columns=['winner', 'player0_id', 'player1_id', 'player0_id', 'player1_id'])
     y = balanced_df['winner']
 
     return x, y
@@ -233,7 +235,7 @@ def run_testing(data, train_data, model, pca):
     X_test_scaled = scaler.transform(X_test)
 
     if pca:
-        perform_pca(X_test_scaled)
+        _, X_test_scaled = perform_pca(X_train, X_test_scaled)
 
     compute_metrics(model, X_test_scaled, y_test)
 
@@ -244,6 +246,6 @@ def run_training(data, model, pca):
     x_scaled = scaler.fit_transform(x) if scaler is not None else exit(1)
 
     if pca:
-        perform_pca(x_scaled)
+        x_scaled, _ = perform_pca(x_scaled)
 
     train_model(model, x_scaled, y)
