@@ -1,6 +1,6 @@
 {
-    "model": "logr", 
+    "model": "xgb", 
     "test": false,
-    "cv": false,
+    "cv": true,
     "pca": false
 }

@@ -1,0 +1,3 @@
+Average Accuracy: 0.6534519488064114
+Max Accuracy: 0.6818939955522609
+Min Accuracy: 0.6311032426388371

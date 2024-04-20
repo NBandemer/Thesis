@@ -64,6 +64,18 @@ def cross_val_model(data, model_name, pca):
         accuracy = model.score(x_test_scaled, y_test)
         accuracies.append(accuracy)
 
+    t = 0
+    for acc in accuracies:
+        t += acc
+    avg_accuracy = t / len(accuracies)
+
+    # Save accuracy to text file
+    path = f'./metrics/{model_name}/cv_acc.txt'
+    with open(path, 'w') as f:
+        f.write(f'Average Accuracy: {avg_accuracy}\n')
+        f.write(f'Max Accuracy: {max(accuracies)}\n')
+        f.write(f'Min Accuracy: {min(accuracies)}')
+
     accuracies_df = pd.DataFrame(accuracies, columns=['accuracy'])
     model_cv_path = f'./metrics/{get_model_name(model)}/'
     accuracies_df.to_csv(f'{model_cv_path}/cv_acc.csv', index=False, encoding='utf-8')
