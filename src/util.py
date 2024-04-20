@@ -102,24 +102,7 @@ def test_train_split_by_year(data):
         ratio = test_count / total
         year -= 1
 
-    train.to_csv('./data/test_train_split/train.csv', index=False, encoding='utf-8')
-    test.to_csv('./data/test_train_split/test.csv', index=False, encoding='utf-8')
-
-def test_train_split_by_year(data):
-    ratio = 0
-    year = 2022
-
-    while ratio < 0.2:
-        train = data[data['year'] < year]
-        test = data[data['year'] >= year]
-        test_count = len(test)
-        total = len(data)
-        ratio = test_count / total
-        year -= 1
-
-    train.drop(columns=['year', 'tourney_id', 'match_num'], inplace=True)
-    test.drop(columns=['year', 'tourney_id', 'match_num'], inplace=True)
-
+    return train, test
     train.to_csv('./data/both/train.csv', index=False, encoding='utf-8')
     test.to_csv('./data/both/test.csv', index=False, encoding='utf-8')
 

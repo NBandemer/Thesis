@@ -4,7 +4,7 @@ import util as u
 import model as m
 
 test, cv, _, pca = u.get_config()
-models = ['logr', 'lgbm']
+models = ['logr', 'lgbm', 'xgb']
 
 if test and cv:
     print('Cannot run test and cv at the same time!')

@@ -11,7 +11,7 @@ import lightgbm as lgb
 
 from sklearn.decomposition import PCA
 
-from sklearn.model_selection import TimeSeriesSplit
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, TimeSeriesSplit
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, roc_curve
 from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
 from sklearn.preprocessing import StandardScaler
@@ -23,11 +23,19 @@ supported_models = 'logr', 'lgbm', 'xgb'
 
 columns = []
 
-def perform_pca(x, x_test=None):
-    pca = PCA(n_components=0.95, svd_solver='full')
+def perform_pca(x, x_test=None, model_name=None):
+    global columns
+    feature_names = columns.tolist()
+
+    pca = PCA(n_components=.95, svd_solver='full')
     pca.fit(x)
     x_scaled = pca.transform(x)
     x_test_scaled = pca.transform(x_test) if x_test is not None else None
+
+    if x_test is None:
+        print(pca.explained_variance_ratio_)
+        # feature_variance_df.to_csv(f'./metrics/{model_name}/explained_variance.csv', index=True, encoding='utf-8')
+    exit(1)
     return x_scaled, x_test_scaled
 
 
@@ -50,7 +58,7 @@ def cross_val_model(data, model_name, pca):
         x_test_scaled = scaler.transform(x_test)
 
         if pca:
-            x_scaled, x_test_scaled = perform_pca(x_scaled, x_test_scaled)
+            x_scaled, x_test_scaled = perform_pca(x_scaled, x_test_scaled, model_name)
 
         model.fit(x_scaled, y)
         accuracy = model.score(x_test_scaled, y_test)
@@ -82,10 +90,10 @@ def get_model_name(model):
 
 def compute_metrics(model, x, y):
     preds = model.predict(x)
-    pred_probs = model.predict_proba(x)[:,1]
-    
+    pred_probs = model.predict_proba(x)[:,1]    
     # Get accuracy, precision, recall, f1, and roc_auc scores
     accuracy = model.score(x, y)
+
     precision = precision_score(y, preds)
     recall = recall_score(y, preds)
     f1 = f1_score(y, preds)
@@ -156,7 +164,18 @@ def create_model(model, seed=42):
     elif model == "lgbm":
         return lgb.LGBMClassifier(random_state=seed)
     elif model == "xgb":
-        return xgb.XGBClassifier(random_state=seed)
+        return xgb.XGBClassifier(
+            objective="binary:logistic", 
+            random_state=seed,
+            tree_method='approx',
+            subsample=0.6,
+            min_child_weight=10,
+            max_depth=5,    
+            learning_rate=0.2,
+            gamma=5,
+            device='cuda',
+            booster='gbtree',
+            colsample_bytree=0.8)
 
 def get_feature_importance(model):
     if type(model) is LogisticRegression:
@@ -188,12 +207,12 @@ def select_model(test, model_type):
     else:
         return create_model(model_type)
 
-def get_differentials(data):
-    cols = ['first_serve_pt', 'first_serve_won', 'second_serve_won', 'double_faults', 'aces', 'break_points_saved', 'break_points_faced', 'return_first_serve_pt_won', 'return_second_serve_won', 'bp_converted', 'bp_opportunities', 'match_difficulty']
-    for col in cols:
-        data[col] = data['player1_' + col] - data['player0_' + col]
-        data = data.drop(columns=['player0_' + col, 'player1_' + col])
-    return data
+# def get_differentials(data):
+#     cols = ['first_serve_pt', 'first_serve_won', 'second_serve_won', 'double_faults', 'aces', 'break_points_saved', 'break_points_faced', 'return_first_serve_pt_won', 'return_second_serve_won', 'bp_converted', 'bp_opportunities', 'match_difficulty']
+#     for col in cols:
+#         data[col] = data['player1_' + col] - data['player0_' + col]
+#         data = data.drop(columns=['player0_' + col, 'player1_' + col])
+#     return data
 
 def get_data(data, model=None):
     if data is None or len(data) < 1:
@@ -212,14 +231,14 @@ def get_data(data, model=None):
     levels = ['A','D','F','G','M']
     surfaces = ['Carpet', 'Clay', 'Hard', 'Grass']
 
-    if get_model_name(model) == 'logr':
-        for surface in surfaces:
-            dropped.append('surface_' + surface)
+    # if get_model_name(model) == 'logr':
+    #     for surface in surfaces:
+    #         dropped.append('surface_' + surface)
         
-        for level in levels:
-            dropped.append('tourney_level_' + level)
+    #     for level in levels:
+    #         dropped.append('tourney_level_' + level)
 
-        balanced_df = balanced_df.drop(columns=dropped)
+    #     balanced_df = balanced_df.drop(columns=dropped)
     
     x = balanced_df.drop(columns=['winner', 'player0_id', 'player1_id', 'player0_id', 'player1_id'])
     y = balanced_df['winner']
@@ -235,9 +254,57 @@ def run_testing(data, train_data, model, pca):
     X_test_scaled = scaler.transform(X_test)
 
     if pca:
-        _, X_test_scaled = perform_pca(X_train, X_test_scaled)
+        _, X_test_scaled = perform_pca(X_train, X_test_scaled, get_model_name(model))
 
     compute_metrics(model, X_test_scaled, y_test)
+
+def tune_hyperparameters(model, params, x, y):
+    tss = TimeSeriesSplit(n_splits=5)
+    model_name = get_model_name(model)
+
+    if model_name == 'logr' or model_name == 'lgbm':
+        search = GridSearchCV(model, param_grid=params, scoring='accuracy', n_jobs=4, cv=tss.split(x,y), verbose=3)
+    else:
+        search = RandomizedSearchCV(model, param_distributions=params, n_iter=5, scoring='accuracy', n_jobs=4, cv=tss.split(x,y), verbose=3, random_state=42)
+    
+    search.fit(x, y)
+    best_params = search.best_params_
+    df_best_params = pd.DataFrame(best_params, index=[0])
+    df_best_params.to_csv(f'./metrics/{model_name}/best_params.csv', index=False, encoding='utf-8')
+    return search.best_estimator_
+
+def tune_model(model, x, y):
+    if type(model) is LogisticRegression:
+        param_grid = {
+            'C': [0.001, 0.01, 0.1, 1, 10, 100, 1000],
+            'penalty': ['l1', 'l2'],
+            'solver': ['liblinear']
+        }
+    elif type(model) is lgb.LGBMClassifier:
+        param_grid = {
+            'n_estimators': [50, 100, 200, 300],
+            'learning_rate': [0.2, 0.1, 0.3],
+            'max_depth': [-1, 5, 7, 10],
+            'num_leaves': [31, 63, 127],
+            'min_child_samples': [20, 50, 100],
+            'subsample': [0.5, 0.7, 1.0],
+            'colsample_bytree': [0.5, 0.7, 1.0]
+        }
+    elif type(model) is xgb.XGBClassifier:
+        param_grid = {
+            'learning_rate': [0.1,0.2, 0.3, 0.4],
+            'booster': ['gbtree', 'gblinear', 'dart'],
+            'min_child_weight': [1, 5, 10],
+            'gamma': [0.5, 1, 1.5, 2, 5],
+            'subsample': [0.6, 0.8, 1.0],
+            'colsample_bytree': [0.6, 0.8, 1.0],
+            'max_depth': [4, 5, 6, 7],
+            'tree_method': ['auto', 'exact', 'approx', 'hist'],
+            'device': ['cuda']
+        }
+
+    tuned_model = tune_hyperparameters(model, param_grid, x, y)
+    return tuned_model
 
 def run_training(data, model, pca):   
     global columns
@@ -246,6 +313,11 @@ def run_training(data, model, pca):
     x_scaled = scaler.fit_transform(x) if scaler is not None else exit(1)
 
     if pca:
-        x_scaled, _ = perform_pca(x_scaled)
+        x_scaled, _ = perform_pca(x_scaled, None, get_model_name(model))
+
+    # if type(model) is xgb.XGBClassifier:
+    #     tuned_model = tune_model(model, x_scaled, y)
+    # else:
+    #     tuned_model = False
 
     train_model(model, x_scaled, y)
