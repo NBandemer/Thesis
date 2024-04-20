@@ -24,7 +24,7 @@ def anonymize_data(df):
 
     df['winner'] = winners
 
-    player_cols = ['id', 'hand', 'age', 'rank']
+    player_cols = ['id', 'hand', 'age', 'rank', 'rank_points']
     stat_cols = ['first_serve_pt', 'first_serve_won', 'second_serve_won', 'double_faults', 'aces', 'break_points_saved', 'break_points_faced', 'return_first_serve_pt_won', 'return_second_serve_won', 'bp_converted', 'bp_opportunities', 'first_serve_pt', 'first_serve_won', 'second_serve_won', 'double_faults', 'break_points_saved', 'break_points_faced', 'return_first_serve_pt_won', 'return_second_serve_won', 'bp_converted', 'bp_opportunities', 'h2h', 'h2h', 'match_difficulty']
 
     player0_wins = df[df['winner'] == 0]
@@ -120,17 +120,17 @@ def test_train_split_by_year(data):
     train.drop(columns=['year', 'tourney_id', 'match_num'], inplace=True)
     test.drop(columns=['year', 'tourney_id', 'match_num'], inplace=True)
 
-    train.to_csv('./data/rank/train.csv', index=False, encoding='utf-8')
-    test.to_csv('./data/rank/test.csv', index=False, encoding='utf-8')
+    train.to_csv('./data/both/train.csv', index=False, encoding='utf-8')
+    test.to_csv('./data/both/test.csv', index=False, encoding='utf-8')
 
 
 def preprocess_data():
     #TODO: Add loser aces back once preprocessing is done
     new_cols = ['w_first_serve_pt', 'w_first_serve_won', 'w_second_serve_won', 'w_double_faults', 'w_aces', 'w_break_points_saved', 'w_break_points_faced', 'w_return_first_serve_pt_won', 'w_return_second_serve_won', 'w_bp_converted', 'w_bp_opportunities', 'l_first_serve_pt', 'l_first_serve_won', 'l_second_serve_won', 'l_aces', 'l_double_faults', 'l_break_points_saved', 'l_break_points_faced', 'l_return_first_serve_pt_won', 'l_return_second_serve_won', 'l_bp_converted', 'l_bp_opportunities', 'w_h2h', 'l_h2h', 'w_match_difficulty', 'l_match_difficulty']
-    old_cols = ['tourney_id', 'tourney_date', 'match_num', 'surface', 'draw_size', 'tourney_level', 'winner_hand', 'loser_hand', 'best_of', 'round', 'winner_age', 'loser_age',  'winner_rank', 'loser_rank', 'winner_id', 'loser_id']
+    old_cols = ['tourney_id', 'tourney_date', 'match_num', 'surface', 'draw_size', 'tourney_level', 'winner_hand', 'loser_hand', 'best_of', 'round', 'winner_age', 'loser_age',  'winner_rank', 'loser_rank', 'winner_rank_points', 'loser_rank_points', 'winner_id', 'loser_id']
     features = new_cols + old_cols
-    df = pd.read_csv('data/atp_matches_1991-2023_with_stats_3.csv', usecols=features)
-    df = df.dropna(subset=features+['winner_rank', 'loser_rank'])
+    df = pd.read_csv('data/atp_matches_1991-2023_with_refined_stats.csv', usecols=features)
+    df = df.dropna(subset=features)
     df = encode_data(df)
     df = anonymize_data(df)
     test_train_split_by_year(df)
@@ -170,7 +170,7 @@ def get_config():
             exit(1)
 
         config = argparse.Namespace(**config)
-        return bool(config.test), bool(config.cv), config.model
+        return bool(config.test), bool(config.cv), config.model, bool(config.pca)
 
 if __name__ == '__main__':
     preprocess_data()

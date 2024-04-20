@@ -1,7 +1,8 @@
 {
-    "model": "lgbm", 
+    "model": "logr", 
     "batch": 32,
     "epochs": 15,
     "test": false,
-    "cv": false
+    "cv": false,
+    "pca": false
 }

@@ -27,7 +27,14 @@ supported_models = 'logr', 'lgbm', 'xgb'
 
 columns = []
 
-def cross_val_model(data, model):
+def perform_pca(x, x_test=None):
+    pca = PCA(n_components=0.95, svd_solver='full')
+    pca.fit(x)
+    x_scaled = pca.transform(x_scaled)
+    x_test_scaled = pca.transform(x_test_scaled)
+
+
+def cross_val_model(data, model, pca):
     tss = TimeSeriesSplit(n_splits=4)
     accuracies = []
 
@@ -35,10 +42,14 @@ def cross_val_model(data, model):
 
     for train_index, test_index in tss.split(data):
         train, test = data.iloc[train_index], data.iloc[test_index]
-        x, y = get_data(train)
+        x, y = get_data(train, model)
         x_scaled = scaler.fit_transform(x)
-        x_test, y_test = get_data(test)
+        x_test, y_test = get_data(test, model)
         x_test_scaled = scaler.transform(x_test)
+
+        if (pca):
+            perform_pca(x_scaled, x_test_scaled)
+
         model.fit(x_scaled, y)
         accuracy = model.score(x_test_scaled, y_test)
         accuracies.append(accuracy)
@@ -48,7 +59,7 @@ def cross_val_model(data, model):
     accuracies_df.to_csv(f'{model_cv_path}/cv_acc.csv', index=False, encoding='utf-8')
 
 def get_load_model_path(model):
-    file_path = f'./saved_models/rank/{model}.joblib'
+    file_path = f'./saved_models/both/{model}.joblib'
     
     if model not in supported_models:
         raise Exception("Model type not implemented")
@@ -86,7 +97,7 @@ def compute_metrics(model, x, y):
     best_threshold = thresholds[np.argmax(tpr - fpr)]
 
     metrics_path = f'./metrics/{model_name}'
-    metrics_path = os.path.join(metrics_path, 'rank/')
+    metrics_path = os.path.join(metrics_path, 'both/')
     os.makedirs(metrics_path, exist_ok=True)
 
     # Save CM
@@ -115,7 +126,7 @@ def compute_metrics(model, x, y):
     metrics_df.to_csv(f"{metrics_path}/metrics.csv", index=False, encoding='utf-8')
 
 def get_saved_model_path(model):
-    model_path = f'./saved_models/rank/'
+    model_path = f'./saved_models/both/'
 
     if type(model) is LogisticRegression:
         model_path = os.path.join(model_path, 'logr.joblib')
@@ -148,10 +159,10 @@ def create_model(model, seed=42):
 def get_feature_importance(model):
     if type(model) is LogisticRegression:
         feature_importance = model.coef_[0]
-        path = './metrics/logr/rank/feature_importance.csv'
+        path = './metrics/logr/both/feature_importance.csv'
     elif type(model) is lgb.LGBMClassifier:
         feature_importance = model.feature_importances_
-        path = './metrics/lgbm/rank/feature_importance.csv'
+        path = './metrics/lgbm/both/feature_importance.csv'
 
     feature_names = columns
 
@@ -182,7 +193,7 @@ def get_differentials(data):
         data = data.drop(columns=['player0_' + col, 'player1_' + col])
     return data
 
-def get_data(data):
+def get_data(data, model=None):
     if data is None or len(data) < 1:
         raise Exception("No data to train the model")
     elif "winner" not in data.columns:
@@ -195,42 +206,44 @@ def get_data(data):
         data[data['winner'] == 1].sample(n=min_count, random_state=1)
     ])
 
-    dropped = ['round', 'best_of', 'draw_size', 'day_sin', 'day_cos']
+    dropped = ['round', 'best_of', 'draw_size', 'day_sin', 'day_cos', 'player0_rank', 'player1_rank']
     levels = ['A','D','F','G','M']
     surfaces = ['Carpet', 'Clay', 'Hard', 'Grass']
 
-    # if get_model_name(model) == 'logr':
-    #     for surface in surfaces:
-    #         dropped.append('surface_' + surface)
+    if get_model_name(model) == 'logr':
+        for surface in surfaces:
+            dropped.append('surface_' + surface)
         
-    #     for level in levels:
-    #         dropped.append('tourney_level_' + level)
+        for level in levels:
+            dropped.append('tourney_level_' + level)
 
-    #     balanced_df = balanced_df.drop(columns=dropped)
+        balanced_df = balanced_df.drop(columns=dropped)
     
     x = balanced_df.drop(columns=['winner'])
     y = balanced_df['winner']
 
     return x, y
 
-def run_testing(data, train_data, model):
-    x, y = get_data(data)
+def run_testing(data, train_data, model, pca):
+    X_test, y_test = get_data(data, model)
 
-    try:
-        means = scaler.mean_
-    except AttributeError:
-        X_train, _ = get_data(train_data)
-        scaler.fit_transform(X_train)
-    
-    x_scaled = scaler.transform(x)
-    compute_metrics(model, x_scaled, y)
+    X_train, _ = get_data(train_data, model)
+    X_train = scaler.fit_transform(X_train)
 
-def run_training(data, model):   
+    X_test_scaled = scaler.transform(X_test)
+
+    if pca:
+        perform_pca(X_test_scaled)
+
+    compute_metrics(model, X_test_scaled, y_test)
+
+def run_training(data, model, pca):   
     global columns
-    x, y = get_data(data)
+    x, y = get_data(data, model)
     columns = x.columns
     x_scaled = scaler.fit_transform(x) if scaler is not None else exit(1)
-    pca = PCA(n_components=0.95, svd_solver='full')
-    pca.fit(x_scaled)
-    x_scaled = pca.transform(x_scaled)
+
+    if pca:
+        perform_pca(x_scaled)
+
     train_model(model, x_scaled, y)
