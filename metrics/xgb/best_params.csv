@@ -1,0 +1,2 @@
+tree_method,subsample,min_child_weight,max_depth,learning_rate,gamma,device,colsample_bytree,booster
+approx,0.6,10,5,0.2,5,cuda,0.8,gbtree

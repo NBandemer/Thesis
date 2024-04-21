@@ -118,8 +118,9 @@ def process_match(row, stats,player,h2h):
             h2h[loser_id] = 1
 
     matches = stats.get_buffer()
-
-    calculate_stats(row, matches, is_winner)
+    
+    if len(matches) > 9:
+        calculate_stats(row, matches, is_winner)
 
     current_match = {
         'first_serve_in': row[prefix + '1stIn'],
@@ -187,7 +188,7 @@ def main():
     print((end - start) / 60)
     all_matches.dropna(subset=new_cols, inplace=True)
     all_matches.drop(columns=old_cols, inplace=True)
-    all_matches.to_csv('./data/atp_matches_1991-2023_with_stats_3.csv')
+    all_matches.to_csv('./data/atp_matches_1991-2023_with_refined_stats.csv')
 
 def check_data():
     data_path = './data/atp_matches_1991-2023.csv'
@@ -201,4 +202,4 @@ def check_processed_data():
     selected_h2h.to_csv('./data/selected_h2h.csv')
 
 if __name__ == '__main__':
-    check_data()
+    main()

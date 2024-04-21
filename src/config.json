@@ -1,8 +1,6 @@
 {
-    "model": "lgbm", 
-    "batch": 32,
-    "epochs": 15,
+    "model": "xgb", 
     "test": false,
     "cv": true,
-    "time_split": false
+    "pca": false
 }
